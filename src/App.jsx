@@ -19,12 +19,18 @@ export default function App() {
     const raw = localStorage.getItem('auth_user');
     if (!raw) return null;
     try {
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      return {
+        ...parsed,
+        name: parsed?.name || parsed?.nome || '',
+        role: parsed?.role || 'USER',
+      };
     } catch (e) {
       localStorage.removeItem('auth_user');
       return null;
     }
   });
+  const isAdmin = user?.role === 'ADMIN';
   const [contracts, setContracts] = useState([]);
   const [adminContracts, setAdminContracts] = useState([]);
   const [adminClients, setAdminClients] = useState([]);
@@ -81,14 +87,20 @@ export default function App() {
         const [c, ct] = await Promise.all([api.listClients(token), api.myContracts(token)]);
         setClients(c);
         setContracts(ct);
-        const [ac, acl] = await Promise.all([
-          api.adminContracts(token),
-          api.adminClients(token),
-        ]);
-        setAdminContracts(ac);
-        setAdminClients(acl);
-        const au = await api.adminUsers(token);
-        setAdminUsers(au);
+        if (isAdmin) {
+          const [ac, acl] = await Promise.all([
+            api.adminContracts(token),
+            api.adminClients(token),
+          ]);
+          setAdminContracts(ac);
+          setAdminClients(acl);
+          const au = await api.adminUsers(token);
+          setAdminUsers(au);
+        } else {
+          setAdminContracts([]);
+          setAdminClients([]);
+          setAdminUsers([]);
+        }
         const summary = await api.dashboardSummary(token);
         setDashboardSummary(summary);
       } catch (err) {
@@ -99,7 +111,7 @@ export default function App() {
       }
     };
     load();
-  }, [token]);
+  }, [token, isAdmin]);
 
   const handleRegister = async (e) => {
     e.preventDefault();
@@ -120,18 +132,23 @@ export default function App() {
       setUser(res.user);
       localStorage.setItem('auth_token', res.token);
       localStorage.setItem('auth_user', JSON.stringify(res.user));
-      const [c, my, ac, acl, au] = await Promise.all([
-        api.listClients(res.token),
-        api.myContracts(res.token),
-        api.adminContracts(res.token),
-        api.adminClients(res.token),
-        api.adminUsers(res.token),
-      ]);
+      const [c, my] = await Promise.all([api.listClients(res.token), api.myContracts(res.token)]);
       setClients(c);
       setContracts(my);
-      setAdminContracts(ac);
-      setAdminClients(acl);
-      setAdminUsers(au);
+      if (res.user.role === 'ADMIN') {
+        const [ac, acl, au] = await Promise.all([
+          api.adminContracts(res.token),
+          api.adminClients(res.token),
+          api.adminUsers(res.token),
+        ]);
+        setAdminContracts(ac);
+        setAdminClients(acl);
+        setAdminUsers(au);
+      } else {
+        setAdminContracts([]);
+        setAdminClients([]);
+        setAdminUsers([]);
+      }
       const summary = await api.dashboardSummary(res.token);
       setDashboardSummary(summary);
       setInfo('Conta criada e login efetuado.');
@@ -161,18 +178,23 @@ export default function App() {
       setUser(res.user);
       localStorage.setItem('auth_token', res.token);
       localStorage.setItem('auth_user', JSON.stringify(res.user));
-      const [c, my, ac, acl, au] = await Promise.all([
-        api.listClients(res.token),
-        api.myContracts(res.token),
-        api.adminContracts(res.token),
-        api.adminClients(res.token),
-        api.adminUsers(res.token),
-      ]);
+      const [c, my] = await Promise.all([api.listClients(res.token), api.myContracts(res.token)]);
       setClients(c);
       setContracts(my);
-      setAdminContracts(ac);
-      setAdminClients(acl);
-      setAdminUsers(au);
+      if (res.user.role === 'ADMIN') {
+        const [ac, acl, au] = await Promise.all([
+          api.adminContracts(res.token),
+          api.adminClients(res.token),
+          api.adminUsers(res.token),
+        ]);
+        setAdminContracts(ac);
+        setAdminClients(acl);
+        setAdminUsers(au);
+      } else {
+        setAdminContracts([]);
+        setAdminClients([]);
+        setAdminUsers([]);
+      }
       const summary = await api.dashboardSummary(res.token);
       setDashboardSummary(summary);
       navigate('/dashboard');
@@ -205,18 +227,19 @@ export default function App() {
       await api.createContract(payload, token);
       form.reset();
       if (user) {
-        const [c, ct, ac, acl, au] = await Promise.all([
-          api.listClients(token),
-          api.myContracts(token),
-          api.adminContracts(token),
-          api.adminClients(token),
-          api.adminUsers(token),
-        ]);
+        const [c, ct] = await Promise.all([api.listClients(token), api.myContracts(token)]);
         setClients(c);
         setContracts(ct);
-        setAdminContracts(ac);
-        setAdminClients(acl);
-        setAdminUsers(au);
+        if (isAdmin) {
+          const [ac, acl, au] = await Promise.all([
+            api.adminContracts(token),
+            api.adminClients(token),
+            api.adminUsers(token),
+          ]);
+          setAdminContracts(ac);
+          setAdminClients(acl);
+          setAdminUsers(au);
+        }
         const summary = await api.dashboardSummary(token);
         setDashboardSummary(summary);
       }
@@ -250,6 +273,26 @@ export default function App() {
       setClients(c);
       setAdminClients(ac);
       setInfo('Cliente criado.');
+      return true;
+    } catch (err) {
+      if (handleUnauthorized(err)) return false;
+      setError(err.message);
+      return false;
+    }
+  };
+
+  const handleCreateUser = async (payload) => {
+    setError('');
+    setInfo('');
+    if (!token) {
+      setError('Faça login para cadastrar usuários.');
+      return false;
+    }
+    try {
+      await api.registerUser(payload);
+      const au = await api.adminUsers(token);
+      setAdminUsers(au);
+      setInfo('Usuário criado.');
       return true;
     } catch (err) {
       if (handleUnauthorized(err)) return false;
@@ -300,7 +343,63 @@ export default function App() {
     }
   };
 
+  const handleEditUser = async (userId, payload) => {
+    setError('');
+    setInfo('');
+    if (!token) {
+      setError('Faça login para editar usuários.');
+      return false;
+    }
+    try {
+      const updated = await api.adminUpdateUser(userId, payload, token);
+      setAdminUsers((prev) => prev.map((user) => (user.id === updated.id ? updated : user)));
+      setInfo('Usuário atualizado.');
+      return true;
+    } catch (err) {
+      if (handleUnauthorized(err)) return false;
+      setError(err.message);
+      return false;
+    }
+  };
+
+  const handleDeleteUser = async (userId) => {
+    setError('');
+    setInfo('');
+    if (!token) {
+      setError('Faça login para excluir usuários.');
+      return false;
+    }
+    try {
+      await api.adminDeleteUser(userId, token);
+      setAdminUsers((prev) => prev.filter((user) => user.id !== userId));
+      setInfo('Usuário removido.');
+      return true;
+    } catch (err) {
+      if (handleUnauthorized(err)) return false;
+      setError(err.message);
+      return false;
+    }
+  };
+
+  const renderAdminRoute = (content) => (
+    <ProtectedRoute token={token}>
+      {user?.role === 'ADMIN' ? (
+        <LoggedLayout user={user} onLogout={handleLogout}>
+          {content}
+        </LoggedLayout>
+      ) : (
+        <Navigate to="/dashboard" replace />
+      )}
+    </ProtectedRoute>
+  );
+
   const refreshAdminData = async () => {
+    if (!token || !isAdmin) {
+      setAdminContracts([]);
+      setAdminClients([]);
+      setAdminUsers([]);
+      return { ac: [], acl: [] };
+    }
     const [ac, acl] = await Promise.all([api.adminContracts(token), api.adminClients(token)]);
     setAdminContracts(ac);
     setAdminClients(acl);
@@ -465,61 +564,52 @@ export default function App() {
         />
         <Route
           path="/admin/clients"
-          element={
-            <ProtectedRoute token={token}>
-              <LoggedLayout user={user} onLogout={handleLogout}>
-                <AdminClients
-                  clients={adminClients}
-                  users={adminUsers}
-                  onCreateClient={handleCreateClient}
-                  onLinkClient={handleLinkClient}
-                  onDeleteClients={handleAdminDeleteClient}
-                  onShareLink={async (clientId) => {
-                    try {
-                      const res = await api.adminShareToken({ clientId: Number(clientId) }, token);
-                      const link = `${window.location.origin}/public/${res.token}`;
-                      window.open(link, '_blank', 'noreferrer');
-                      setInfo('Link aberto em nova guia.');
-                    } catch (err) {
-                      if (handleUnauthorized(err)) return;
-                      setError(err.message);
-                    }
-                  }}
-                />
-              </LoggedLayout>
-            </ProtectedRoute>
-          }
+          element={renderAdminRoute(
+            <AdminClients
+              clients={adminClients}
+              users={adminUsers}
+              onCreateClient={handleCreateClient}
+              onLinkClient={handleLinkClient}
+              onDeleteClients={handleAdminDeleteClient}
+              onShareLink={async (clientId) => {
+                try {
+                  const res = await api.adminShareToken({ clientId: Number(clientId) }, token);
+                  const link = `${window.location.origin}/public/${res.token}`;
+                  window.open(link, '_blank', 'noreferrer');
+                  setInfo('Link aberto em nova guia.');
+                } catch (err) {
+                  if (handleUnauthorized(err)) return;
+                  setError(err.message);
+                }
+              }}
+            />
+          )}
         />
         <Route
           path="/admin/contracts"
-          element={
-            <ProtectedRoute token={token}>
-              <LoggedLayout user={user} onLogout={handleLogout}>
-                <AdminContracts
-                  clients={adminClients}
-                  contracts={adminContracts}
-                  onCreateContract={handleAdminCreateContract}
-                  onUpdateContract={handleAdminUpdateContract}
-                  onDeleteContract={handleAdminDeleteContract}
-                  user={user}
-                />
-              </LoggedLayout>
-            </ProtectedRoute>
-          }
+          element={renderAdminRoute(
+            <AdminContracts
+              clients={adminClients}
+              contracts={adminContracts}
+              onCreateContract={handleAdminCreateContract}
+              onUpdateContract={handleAdminUpdateContract}
+              onDeleteContract={handleAdminDeleteContract}
+              user={user}
+            />
+          )}
         />
         <Route
           path="/admin/users"
-          element={
-            <ProtectedRoute token={token}>
-              <LoggedLayout user={user} onLogout={handleLogout}>
-                <AdminUsers
-                  users={adminUsers}
-                  clients={adminClients}
-                  onLinkClientsToUser={handleLinkClientsToUser}
-                />
-              </LoggedLayout>
-            </ProtectedRoute>
-          }
+          element={renderAdminRoute(
+            <AdminUsers
+              users={adminUsers}
+              clients={adminClients}
+              onLinkClientsToUser={handleLinkClientsToUser}
+              onEditUser={handleEditUser}
+              onDeleteUser={handleDeleteUser}
+              onCreateUser={handleCreateUser}
+            />
+          )}
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

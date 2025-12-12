@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 export default function AdminClients({
@@ -15,7 +15,35 @@ export default function AdminClients({
   const [selectedUserId, setSelectedUserId] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
   const [deleting, setDeleting] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortConfig, setSortConfig] = useState({ key: 'nome', direction: 'asc' });
   const navigate = useNavigate();
+
+  const filteredClients = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return clients;
+    return clients.filter((client) =>
+      `${client.nome} ${client.sobrenome}`.toLowerCase().includes(term),
+    );
+  }, [clients, searchTerm]);
+
+  const sortedClients = useMemo(() => {
+    const sorted = [...filteredClients];
+    const { key, direction } = sortConfig;
+    sorted.sort((a, b) => {
+      const aValue = (a[key] ?? '').toString().trim();
+      const bValue = (b[key] ?? '').toString().trim();
+      const comparison = aValue.localeCompare(bValue, 'pt-BR', { sensitivity: 'base' });
+      return direction === 'asc' ? comparison : -comparison;
+    });
+    return sorted;
+  }, [filteredClients, sortConfig]);
+
+  const visibleClientIds = useMemo(() => sortedClients.map((client) => client.id), [
+    sortedClients,
+  ]);
+  const allVisibleSelected =
+    visibleClientIds.length > 0 && visibleClientIds.every((id) => selectedIds.includes(id));
 
   const toggleSelect = (clientId) => {
     setSelectedIds((prev) =>
@@ -24,11 +52,37 @@ export default function AdminClients({
   };
 
   const toggleAll = (checked) => {
-    if (checked) {
-      setSelectedIds(clients.map((c) => c.id));
-    } else {
+    if (!visibleClientIds.length) {
       setSelectedIds([]);
+      return;
     }
+    if (checked) {
+      setSelectedIds((prev) => Array.from(new Set([...prev, ...visibleClientIds])));
+    } else {
+      setSelectedIds((prev) => prev.filter((id) => !visibleClientIds.includes(id)));
+    }
+  };
+
+  const handleSort = (key) => {
+    setSortConfig((prev) => {
+      if (prev.key === key) {
+        return {
+          key,
+          direction: prev.direction === 'asc' ? 'desc' : 'asc',
+        };
+      }
+      return { key, direction: 'asc' };
+    });
+  };
+
+  const getSortIndicator = (key) => {
+    if (sortConfig.key !== key) return '↕';
+    return sortConfig.direction === 'asc' ? '↑' : '↓';
+  };
+
+  const getAriaSort = (key) => {
+    if (sortConfig.key !== key) return 'none';
+    return sortConfig.direction === 'asc' ? 'ascending' : 'descending';
   };
 
   const handleDeleteSelected = async () => {
@@ -90,21 +144,59 @@ export default function AdminClients({
           </div>
         </div>
         <div className="table">
+          <div className="table-utilities">
+            <label className="table-search">
+              <span className="mini">Buscar por nome</span>
+              <input
+                type="search"
+                placeholder="Digite nome ou sobrenome"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </label>
+            <span className="badge mini">
+              {sortedClients.length} de {clients.length} exibidos
+            </span>
+          </div>
           <div className="table-row head">
             <span>
               <input
                 type="checkbox"
                 aria-label="Selecionar todos"
-                checked={selectedIds.length === clients.length && clients.length > 0}
+                checked={allVisibleSelected}
                 onChange={(e) => toggleAll(e.target.checked)}
                 disabled={deleting}
               />
             </span>
-            <span>Nome</span>
-            <span>Sobrenome</span>
+            <span>
+              <button
+                type="button"
+                className="table-sort-btn"
+                onClick={() => handleSort('nome')}
+                aria-sort={getAriaSort('nome')}
+              >
+                Nome
+                <span aria-hidden="true" className="sort-indicator">
+                  {getSortIndicator('nome')}
+                </span>
+              </button>
+            </span>
+            <span>
+              <button
+                type="button"
+                className="table-sort-btn"
+                onClick={() => handleSort('sobrenome')}
+                aria-sort={getAriaSort('sobrenome')}
+              >
+                Sobrenome
+                <span aria-hidden="true" className="sort-indicator">
+                  {getSortIndicator('sobrenome')}
+                </span>
+              </button>
+            </span>
             <span>Ações</span>
           </div>
-          {clients.map((c) => (
+          {sortedClients.map((c) => (
             <div key={c.id} className="table-row">
               <span>
                 <input
@@ -147,7 +239,7 @@ export default function AdminClients({
               </span>
             </div>
           ))}
-          {!clients.length && (
+          {!sortedClients.length && (
             <div className="table-row">
               <span colSpan={4} className="mini">
                 Nenhum cliente cadastrado.

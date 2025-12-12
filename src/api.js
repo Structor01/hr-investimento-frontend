@@ -151,6 +151,23 @@ export const api = {
     return handle(res);
   },
 
+  async adminUpdateUser(id, payload, token) {
+    const res = await fetch(`${API_BASE}/admin/users/${id}`, {
+      method: 'PATCH',
+      headers: headers(token),
+      body: JSON.stringify(payload),
+    });
+    return handle(res);
+  },
+
+  async adminDeleteUser(id, token) {
+    const res = await fetch(`${API_BASE}/admin/users/${id}`, {
+      method: 'DELETE',
+      headers: headers(token),
+    });
+    return handle(res);
+  },
+
   async adminShareToken(payload, token) {
     const res = await fetch(`${API_BASE}/admin/clients/share-token`, {
       method: 'POST',

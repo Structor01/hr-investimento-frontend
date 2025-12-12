@@ -2,6 +2,8 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 
 export default function LoggedLayout({ user, onLogout, children }) {
+  const isAdmin = user?.role === 'ADMIN';
+
   return (
     <div className="layout">
       <aside className="sidebar">
@@ -15,12 +17,14 @@ export default function LoggedLayout({ user, onLogout, children }) {
             <Link to="/dashboard">Painel</Link>
             <Link to="/contracts">Contratos</Link>
           </div>
-          <div className="sidebar-group">
-            <p className="sidebar-group-title">Admin</p>
-            <Link to="/admin/clients">Clientes</Link>
-            <Link to="/admin/contracts">Contratos</Link>
-            <Link to="/admin/users">Usuários</Link>
-          </div>
+          {isAdmin && (
+            <div className="sidebar-group">
+              <p className="sidebar-group-title">Admin</p>
+              <Link to="/admin/clients">Clientes</Link>
+              <Link to="/admin/contracts">Contratos</Link>
+              <Link to="/admin/users">Usuários</Link>
+            </div>
+          )}
         </div>
         <button className="ghost" type="button" onClick={onLogout}>
           Sair
