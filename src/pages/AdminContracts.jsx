@@ -17,6 +17,25 @@ export default function AdminContracts({
   const location = useLocation();
   const totalValor = contracts.reduce((acc, ctr) => acc + Number(ctr.valor || 0), 0);
 
+  const statusLabels = {
+    FINALIZADO: 'Finalizado',
+    ABERTO: 'Aberto',
+  };
+
+  const getContractStatusFromDate = (contract) => {
+    if (!contract.dataRecebimento) {
+      return 'Aberto';
+    }
+    const dataRecebimento = new Date(contract.dataRecebimento);
+    if (Number.isNaN(dataRecebimento.getTime())) {
+      return 'Aberto';
+    }
+    return dataRecebimento.getTime() < Date.now() ? 'Finalizado' : 'Aberto';
+  };
+
+  const resolveContractStatus = (contract) =>
+    statusLabels[contract.status] || getContractStatusFromDate(contract);
+
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const cid = params.get('clienteId') || '';
@@ -74,6 +93,7 @@ export default function AdminContracts({
                 <th>Contrato</th>
                 <th>Investimento</th>
                 <th>Recebimento</th>
+                <th>Status</th>
                 <th>Valor</th>
                 <th>Rentab.</th>
                 <th style={{ textAlign: 'right' }}>Ações</th>
@@ -102,6 +122,7 @@ export default function AdminContracts({
                         })
                       : '—'}
                   </td>
+                  <td>{resolveContractStatus(ctr)}</td>
                   <td>
                     {Number(ctr.valor || 0).toLocaleString('pt-BR', {
                       style: 'currency',
@@ -179,7 +200,7 @@ export default function AdminContracts({
               ))}
               {!contracts.length && (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center' }}>
+                  <td colSpan={8} style={{ textAlign: 'center' }}>
                     Nenhum contrato cadastrado.
                   </td>
                 </tr>
@@ -188,6 +209,7 @@ export default function AdminContracts({
                 <tr className="total">
                   <td>Total</td>
                   <td>{contracts.length} contratos</td>
+                  <td>—</td>
                   <td>—</td>
                   <td>—</td>
                   <td>

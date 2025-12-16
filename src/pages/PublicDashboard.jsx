@@ -31,10 +31,11 @@ export default function PublicDashboard() {
     if (!contractsList.length) return [];
 
     const monthsDiffInclusive = (start, end) => {
-      const s = new Date(start.getFullYear(), start.getMonth(), 1);
-      const e = new Date(end.getFullYear(), end.getMonth(), 1);
-      const diff = (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth());
-      return diff >= 0 ? diff + 1 : 0;
+      const diff =
+        (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+      const adjust = end.getDate() < start.getDate() ? -1 : 0;
+      const months = diff + adjust;
+      return months >= 1 ? months : 1;
     };
 
     const buckets = new Map();
@@ -49,7 +50,7 @@ export default function PublicDashboard() {
       const months = Math.max(1, monthsDiffInclusive(start, end));
 
       const valor = Number(ctr.valor || 0);
-      const monthlyRate = 1 + Number(ctr.rentabilidade || 0) / 100;
+      const monthlyProfit = valor * (Number(ctr.rentabilidade || 0) / 100);
 
       for (let idx = 0; idx < months; idx += 1) {
         const monthDate = new Date(start.getFullYear(), start.getMonth() + idx, 1);
@@ -59,7 +60,7 @@ export default function PublicDashboard() {
         }
         const bucket = buckets.get(key);
         if (bucket) {
-          bucket.value += valor * Math.pow(monthlyRate, idx);
+          bucket.value += valor + monthlyProfit * (idx + 1);
         }
       }
     });
