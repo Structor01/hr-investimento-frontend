@@ -1,5 +1,37 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+
+const AddContractIcon = () => (
+  <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 5v14" />
+    <path d="M5 12h14" />
+  </svg>
+);
+
+const LinkUserIcon = () => (
+  <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+    <circle cx="12" cy="7" r="4" />
+  </svg>
+);
+
+const ExternalLinkIcon = () => (
+  <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 3h7v7" />
+    <path d="M10 14L21 3" />
+    <path d="M21 3l-9 9" />
+    <path d="M5 5h7" />
+    <path d="M5 5v14" />
+    <path d="M5 19h14" />
+  </svg>
+);
+
+const EditClientIcon = () => (
+  <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 20h9" />
+    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+  </svg>
+);
 
 export default function AdminClients({
   clients,
@@ -8,6 +40,7 @@ export default function AdminClients({
   onLinkClient,
   onShareLink,
   onDeleteClients,
+  onUpdateClient,
 }) {
   const [open, setOpen] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
@@ -18,6 +51,15 @@ export default function AdminClients({
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'nome', direction: 'asc' });
   const navigate = useNavigate();
+  const [clientType, setClientType] = useState('INVESTIDOR');
+  const [editingClient, setEditingClient] = useState(null);
+  const [clientFormKey, setClientFormKey] = useState('client-form');
+
+  const resetClientFormState = () => {
+    setEditingClient(null);
+    setClientType('INVESTIDOR');
+    setClientFormKey(`client-form-${Date.now()}`);
+  };
 
   const filteredClients = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -99,18 +141,57 @@ export default function AdminClients({
     setDeleting(false);
   };
 
+  const handleClientFormSubmit = async (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const data = new FormData(form);
+    const payload = {
+      nome: (data.get('nome') || '').toString(),
+      sobrenome: (data.get('sobrenome') || '').toString(),
+      tipo: (data.get('tipo') || 'INVESTIDOR').toString(),
+    };
+    if (editingClient) {
+      const ok = await onUpdateClient?.(editingClient.id, payload);
+      if (ok) {
+        resetClientFormState();
+        form.reset();
+        setOpen(false);
+      }
+      return;
+    }
+    const ok = await onCreateClient(e);
+    if (ok) {
+      resetClientFormState();
+      setOpen(false);
+    }
+  };
+
   useEffect(() => {
     setSelectedIds((prev) => prev.filter((id) => clients.some((c) => c.id === id)));
   }, [clients]);
+
+  const clientTypeLabels = {
+    INVESTIDOR: 'Investidor',
+    ESCRITORIO: 'Escritório',
+  };
 
   return (
     <>
       <div className="card">
         <div className="flex-between">
-          <h2 className="title">Admin • Clientes</h2>
+          <h2 className="title">Cadastros</h2>
           <div className="header-actions">
             <span className="badge">{clients.length}</span>
-            <button type="button" onClick={() => setOpen(true)} style={{ whiteSpace: 'nowrap' }}>
+            <button
+              type="button"
+              onClick={() => {
+                setEditingClient(null);
+                setClientType('INVESTIDOR');
+                setClientFormKey(`client-form-${Date.now()}`);
+                setOpen(true);
+              }}
+              style={{ whiteSpace: 'nowrap' }}
+            >
               Novo cliente
             </button>
           </div>
@@ -119,7 +200,7 @@ export default function AdminClients({
 
       <div className="card">
         <div className="flex-between">
-          <h3 className="title">Clientes cadastrados</h3>
+          <h3 className="title">Cadastros publicados</h3>
           <div className="header-actions" style={{ gap: '0.5rem' }}>
             {!!selectedIds.length && (
               <span className="badge" aria-label={`${selectedIds.length} selecionado(s)`}>
@@ -194,6 +275,7 @@ export default function AdminClients({
                 </span>
               </button>
             </span>
+            <span>Tipo</span>
             <span>Ações</span>
           </div>
           {sortedClients.map((c) => (
@@ -208,35 +290,56 @@ export default function AdminClients({
                 />
               </span>
               <span>{c.nome}</span>
-              <span>{c.sobrenome}</span>
-              <span>
-                <div className="table-actions">
-                  <button
-                    type="button"
-                    className="pill"
-                    onClick={() => navigate(`/admin/contracts?clienteId=${c.id}&open=true`)}
-                  >
-                    Adicionar contrato
-                  </button>
-                  <button
-                    type="button"
-                    className="pill"
-                    onClick={() => {
-                      setSelectedClient(c);
-                      setLinkOpen(true);
-                    }}
-                  >
-                    Vincular usuário
-                  </button>
-                  <button
-                    type="button"
-                    className="pill"
-                    onClick={() => onShareLink?.(c.id)}
-                  >
-                    Abrir link
-                  </button>
-                </div>
-              </span>
+            <span>{c.sobrenome}</span>
+            <span>{clientTypeLabels[c.tipo] || clientTypeLabels.INVESTIDOR}</span>
+            <span>
+              <div className="table-actions">
+                <button
+                  type="button"
+                  className="icon-chip"
+                  aria-label="Editar cliente"
+                  data-tooltip="Editar cliente"
+                  onClick={() => {
+                    setEditingClient(c);
+                    setClientType(c.tipo || 'INVESTIDOR');
+                    setClientFormKey(`client-form-edit-${c.id}-${Date.now()}`);
+                    setOpen(true);
+                  }}
+                >
+                  <EditClientIcon />
+                </button>
+                <button
+                  type="button"
+                  className="icon-chip"
+                  aria-label="Adicionar contrato"
+                  data-tooltip="Adicionar contrato"
+                  onClick={() => navigate(`/admin/contracts?clienteId=${c.id}&open=true`)}
+                >
+                  <AddContractIcon />
+                </button>
+                <button
+                  type="button"
+                  className="icon-chip"
+                  aria-label="Vincular usuário"
+                  data-tooltip="Vincular usuário"
+                  onClick={() => {
+                    setSelectedClient(c);
+                    setLinkOpen(true);
+                  }}
+                >
+                  <LinkUserIcon />
+                </button>
+                <button
+                  type="button"
+                  className="icon-chip"
+                  aria-label="Abrir link público"
+                  data-tooltip="Abrir link público"
+                  onClick={() => onShareLink?.(c.id)}
+                >
+                  <ExternalLinkIcon />
+                </button>
+              </div>
+            </span>
             </div>
           ))}
           {!sortedClients.length && (
@@ -254,14 +357,16 @@ export default function AdminClients({
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="flex-between">
               <h3 className="title">Vincular cliente a usuário</h3>
-              <button
-                type="button"
-                className="icon-btn"
-                onClick={() => setLinkOpen(false)}
-                aria-label="Fechar"
-              >
-                ×
-              </button>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    onClick={() => {
+                      setLinkOpen(false);
+                    }}
+                    aria-label="Fechar"
+                  >
+                    ×
+                  </button>
             </div>
             <form
               className="form"
@@ -301,32 +406,66 @@ export default function AdminClients({
       )}
 
       {open && (
-        <div className="modal-backdrop" onClick={() => setOpen(false)}>
+        <div
+          className="modal-backdrop"
+          onClick={() => {
+            resetClientFormState();
+            setOpen(false);
+          }}
+        >
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="flex-between">
-              <h3 className="title">Novo Cliente</h3>
-              <button type="button" className="icon-btn" onClick={() => setOpen(false)} aria-label="Fechar">
+              <h3 className="title">{editingClient ? 'Editar cadastro' : 'Novo Cadastro'}</h3>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => {
+                  resetClientFormState();
+                  setOpen(false);
+                }}
+                aria-label="Fechar"
+              >
                 ×
               </button>
             </div>
-            <form
-              className="form"
-              onSubmit={async (e) => {
-                const ok = await onCreateClient(e);
-                if (ok) setOpen(false);
-              }}
-            >
+            <form className="form" key={clientFormKey} onSubmit={handleClientFormSubmit}>
               <div className="row">
                 <label>
                   Nome
-                  <input name="nome" placeholder="Nome" required />
+                  <input
+                    name="nome"
+                    placeholder="Nome"
+                    required
+                    defaultValue={editingClient?.nome || ''}
+                  />
                 </label>
                 <label>
                   Sobrenome
-                  <input name="sobrenome" placeholder="Sobrenome" required />
+                  <input
+                    name="sobrenome"
+                    placeholder="Sobrenome"
+                    required
+                    defaultValue={editingClient?.sobrenome || ''}
+                  />
+                </label>
+                <label>
+                  Tipo
+                  <select
+                    name="tipo"
+                    value={clientType}
+                    onChange={(e) => setClientType(e.target.value)}
+                  >
+                    {Object.entries(clientTypeLabels).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
                 </label>
               </div>
-              <button type="submit">Salvar cliente</button>
+              <button type="submit">
+                {editingClient ? 'Salvar alterações' : 'Salvar cliente'}
+              </button>
             </form>
           </div>
         </div>

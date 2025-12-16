@@ -77,8 +77,13 @@ export const api = {
     return handle(res);
   },
 
-  async adminContracts(token) {
-    const res = await fetch(`${API_BASE}/admin/contracts`, {
+  async adminContracts(token, filters = {}) {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value) params.append(key, value);
+    });
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const res = await fetch(`${API_BASE}/admin/contracts${query}`, {
       headers: headers(token),
     });
     return handle(res);
@@ -120,6 +125,15 @@ export const api = {
   async adminCreateClient(payload, token) {
     const res = await fetch(`${API_BASE}/admin/clients`, {
       method: 'POST',
+      headers: headers(token),
+      body: JSON.stringify(payload),
+    });
+    return handle(res);
+  },
+
+  async adminUpdateClient(id, payload, token) {
+    const res = await fetch(`${API_BASE}/admin/clients/${id}`, {
+      method: 'PATCH',
       headers: headers(token),
       body: JSON.stringify(payload),
     });

@@ -33,6 +33,7 @@ export default function App() {
   const isAdmin = user?.role === 'ADMIN';
   const [contracts, setContracts] = useState([]);
   const [adminContracts, setAdminContracts] = useState([]);
+  const [adminContractFilters, setAdminContractFilters] = useState({});
   const [adminClients, setAdminClients] = useState([]);
   const [adminUsers, setAdminUsers] = useState([]);
   const [dashboardSummary, setDashboardSummary] = useState(null);
@@ -79,6 +80,43 @@ export default function App() {
     return false;
   };
 
+  const loadAdminContracts = async (filters = {}) => {
+    if (!token) return [];
+    const ac = await api.adminContracts(token, filters);
+    setAdminContracts(ac);
+    return ac;
+  };
+
+  const refreshAdminData = async (filters = adminContractFilters) => {
+    if (!token || !isAdmin) {
+      setAdminContracts([]);
+      setAdminClients([]);
+      setAdminUsers([]);
+      return { ac: [], acl: [] };
+    }
+    const [ac, acl] = await Promise.all([loadAdminContracts(filters), api.adminClients(token)]);
+    setAdminClients(acl);
+    const au = await api.adminUsers(token);
+    setAdminUsers(au);
+    return { ac, acl };
+  };
+
+  const handleAdminContractsFilter = async (filters) => {
+    setError('');
+    setInfo('');
+    if (!token) return;
+    setGlobalLoading(true);
+    try {
+      setAdminContractFilters(filters);
+      await loadAdminContracts(filters);
+    } catch (err) {
+      if (handleUnauthorized(err)) return;
+      setError(err.message);
+    } finally {
+      setGlobalLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!token) return;
     const load = async () => {
@@ -88,12 +126,7 @@ export default function App() {
         setClients(c);
         setContracts(ct);
         if (isAdmin) {
-          const [ac, acl] = await Promise.all([
-            api.adminContracts(token),
-            api.adminClients(token),
-          ]);
-          setAdminContracts(ac);
-          setAdminClients(acl);
+          await Promise.all([loadAdminContracts(adminContractFilters), api.adminClients(token)]);
           const au = await api.adminUsers(token);
           setAdminUsers(au);
         } else {
@@ -136,12 +169,12 @@ export default function App() {
       setClients(c);
       setContracts(my);
       if (res.user.role === 'ADMIN') {
-        const [ac, acl, au] = await Promise.all([
-          api.adminContracts(res.token),
+        setAdminContractFilters({});
+        const [acl, au] = await Promise.all([
           api.adminClients(res.token),
           api.adminUsers(res.token),
         ]);
-        setAdminContracts(ac);
+        await loadAdminContracts();
         setAdminClients(acl);
         setAdminUsers(au);
       } else {
@@ -182,12 +215,12 @@ export default function App() {
       setClients(c);
       setContracts(my);
       if (res.user.role === 'ADMIN') {
-        const [ac, acl, au] = await Promise.all([
-          api.adminContracts(res.token),
+        setAdminContractFilters({});
+        const [acl, au] = await Promise.all([
           api.adminClients(res.token),
           api.adminUsers(res.token),
         ]);
-        setAdminContracts(ac);
+        await loadAdminContracts();
         setAdminClients(acl);
         setAdminUsers(au);
       } else {
@@ -265,6 +298,7 @@ export default function App() {
     const payload = {
       nome: (data.get('nome') || '').toString(),
       sobrenome: (data.get('sobrenome') || '').toString(),
+      tipo: (data.get('tipo') || 'INVESTIDOR').toString(),
     };
     try {
       await api.createClient(payload, token);
@@ -273,6 +307,27 @@ export default function App() {
       setClients(c);
       setAdminClients(ac);
       setInfo('Cliente criado.');
+      return true;
+    } catch (err) {
+      if (handleUnauthorized(err)) return false;
+      setError(err.message);
+      return false;
+    }
+  };
+
+  const handleUpdateClient = async (clientId, payload) => {
+    setError('');
+    setInfo('');
+    if (!token) {
+      setError('Faça login para editar clientes.');
+      return false;
+    }
+    try {
+      await api.adminUpdateClient(clientId, payload, token);
+      const [c, ac] = await Promise.all([api.listClients(token), api.adminClients(token)]);
+      setClients(c);
+      setAdminClients(ac);
+      setInfo('Cliente atualizado.');
       return true;
     } catch (err) {
       if (handleUnauthorized(err)) return false;
@@ -392,19 +447,6 @@ export default function App() {
       )}
     </ProtectedRoute>
   );
-
-  const refreshAdminData = async () => {
-    if (!token || !isAdmin) {
-      setAdminContracts([]);
-      setAdminClients([]);
-      setAdminUsers([]);
-      return { ac: [], acl: [] };
-    }
-    const [ac, acl] = await Promise.all([api.adminContracts(token), api.adminClients(token)]);
-    setAdminContracts(ac);
-    setAdminClients(acl);
-    return { ac, acl };
-  };
 
   const handleAdminCreateContract = async (payload) => {
     setError('');
@@ -569,6 +611,7 @@ export default function App() {
               clients={adminClients}
               users={adminUsers}
               onCreateClient={handleCreateClient}
+              onUpdateClient={handleUpdateClient}
               onLinkClient={handleLinkClient}
               onDeleteClients={handleAdminDeleteClient}
               onShareLink={async (clientId) => {
@@ -588,14 +631,15 @@ export default function App() {
         <Route
           path="/admin/contracts"
           element={renderAdminRoute(
-            <AdminContracts
-              clients={adminClients}
-              contracts={adminContracts}
-              onCreateContract={handleAdminCreateContract}
-              onUpdateContract={handleAdminUpdateContract}
-              onDeleteContract={handleAdminDeleteContract}
-              user={user}
-            />
+                <AdminContracts
+                  clients={adminClients}
+                  contracts={adminContracts}
+                  onCreateContract={handleAdminCreateContract}
+                  onUpdateContract={handleAdminUpdateContract}
+                  onDeleteContract={handleAdminDeleteContract}
+                  onFilter={handleAdminContractsFilter}
+                  user={user}
+                />
           )}
         />
         <Route

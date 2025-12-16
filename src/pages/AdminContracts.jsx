@@ -7,6 +7,7 @@ export default function AdminContracts({
   onCreateContract,
   onUpdateContract,
   onDeleteContract,
+  onFilter,
   user,
 }) {
   const [open, setOpen] = useState(false);
@@ -14,12 +15,26 @@ export default function AdminContracts({
   const [valor, setValor] = useState('');
   const [editingContract, setEditingContract] = useState(null);
   const [formKey, setFormKey] = useState('new');
+  const [status, setStatus] = useState('ABERTO');
+  const [tipo, setTipo] = useState('ATIVO');
+  const [produto, setProduto] = useState('PRECATORIO');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [tipoFilter, setTipoFilter] = useState('');
+  const [produtoFilter, setProdutoFilter] = useState('');
   const location = useLocation();
   const totalValor = contracts.reduce((acc, ctr) => acc + Number(ctr.valor || 0), 0);
 
   const statusLabels = {
     FINALIZADO: 'Finalizado',
     ABERTO: 'Aberto',
+  };
+  const tipoLabels = {
+    ATIVO: 'Ativo',
+    PASSIVO: 'Passivo',
+  };
+  const produtoLabels = {
+    PRECATORIO: 'Precatório',
+    RPV: 'RPV',
   };
 
   const getContractStatusFromDate = (contract) => {
@@ -61,6 +76,21 @@ export default function AdminContracts({
     return Number.isFinite(num) ? num : 0;
   };
 
+  const applyFilters = () => {
+    onFilter?.({
+      status: statusFilter || undefined,
+      tipo: tipoFilter || undefined,
+      produto: produtoFilter || undefined,
+    });
+  };
+
+  const clearFilters = () => {
+    setStatusFilter('');
+    setTipoFilter('');
+    setProdutoFilter('');
+    onFilter?.({});
+  };
+
   return (
     <>
       <div className="card">
@@ -72,6 +102,9 @@ export default function AdminContracts({
               setValor('');
               setEditingContract(null);
               setFormKey(`new-${Date.now()}`);
+              setStatus('ABERTO');
+              setTipo('ATIVO');
+              setProduto('PRECATORIO');
               setOpen(true);
             }}
           >
@@ -85,6 +118,38 @@ export default function AdminContracts({
           <h3 className="title">Todos os contratos</h3>
           <span className="badge">Admin</span>
         </div>
+        <div className="filters" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', margin: '0.75rem 0' }}>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option value="">Todos os status</option>
+            {Object.entries(statusLabels).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <select value={tipoFilter} onChange={(e) => setTipoFilter(e.target.value)}>
+            <option value="">Todos os tipos</option>
+            {Object.entries(tipoLabels).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <select value={produtoFilter} onChange={(e) => setProdutoFilter(e.target.value)}>
+            <option value="">Todos os produtos</option>
+            {Object.entries(produtoLabels).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <button type="button" onClick={applyFilters}>
+            Filtrar
+          </button>
+          <button type="button" onClick={clearFilters}>
+            Limpar filtros
+          </button>
+        </div>
         <div style={{ overflowX: 'auto', marginTop: '0.75rem' }}>
           <table className="data-table">
             <thead>
@@ -94,6 +159,8 @@ export default function AdminContracts({
                 <th>Investimento</th>
                 <th>Recebimento</th>
                 <th>Status</th>
+                <th>Tipo</th>
+                <th>Produto</th>
                 <th>Valor</th>
                 <th>Rentab.</th>
                 <th style={{ textAlign: 'right' }}>Ações</th>
@@ -123,6 +190,8 @@ export default function AdminContracts({
                       : '—'}
                   </td>
                   <td>{resolveContractStatus(ctr)}</td>
+                  <td>{tipoLabels[ctr.tipo] || '—'}</td>
+                  <td>{produtoLabels[ctr.produto] || '—'}</td>
                   <td>
                     {Number(ctr.valor || 0).toLocaleString('pt-BR', {
                       style: 'currency',
@@ -147,6 +216,9 @@ export default function AdminContracts({
                             ),
                           );
                           setFormKey(`edit-${ctr.id}`);
+                          setStatus(ctr.status || 'ABERTO');
+                          setTipo(ctr.tipo || 'ATIVO');
+                          setProduto(ctr.produto || 'PRECATORIO');
                           setOpen(true);
                         }}
                       >
@@ -230,6 +302,9 @@ export default function AdminContracts({
           onClick={() => {
             setValor('');
             setEditingContract(null);
+            setStatus('ABERTO');
+            setTipo('ATIVO');
+            setProduto('PRECATORIO');
             setOpen(false);
           }}
         >
@@ -242,6 +317,9 @@ export default function AdminContracts({
                 onClick={() => {
                   setValor('');
                   setEditingContract(null);
+                  setStatus('ABERTO');
+                  setTipo('ATIVO');
+                  setProduto('PRECATORIO');
                   setOpen(false);
                 }}
                 aria-label="Fechar"
@@ -263,6 +341,9 @@ export default function AdminContracts({
                   dataInvestimento: (data.get('dataInvestimento') || '').toString(),
                   dataRecebimento: (data.get('dataRecebimento') || '').toString(),
                   arquivoUrl: (data.get('arquivoUrl') || '').toString(),
+                  status,
+                  tipo,
+                  produto,
                 };
                 const ok = editingContract
                   ? await onUpdateContract(editingContract.id, payload)
@@ -271,6 +352,9 @@ export default function AdminContracts({
                   setValor('');
                   setEditingContract(null);
                   setOpen(false);
+                  setStatus('ABERTO');
+                  setTipo('ATIVO');
+                  setProduto('PRECATORIO');
                 }
               }}
             >
@@ -356,7 +440,54 @@ export default function AdminContracts({
                   />
                 </label>
               </div>
+              <div className="row">
+                <label>
+                  Tipo
+                  <select
+                    name="tipo"
+                    required
+                    value={tipo}
+                    onChange={(e) => setTipo(e.target.value)}
+                  >
+                    {Object.entries(tipoLabels).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Produto
+                  <select
+                    name="produto"
+                    required
+                    value={produto}
+                    onChange={(e) => setProduto(e.target.value)}
+                  >
+                    {Object.entries(produtoLabels).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
               <label>
+                Status
+                <select
+                  name="status"
+                  required
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value)}
+                >
+                  {Object.entries(statusLabels).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+             <label>
                 Link do arquivo
                 <input
                   name="arquivoUrl"

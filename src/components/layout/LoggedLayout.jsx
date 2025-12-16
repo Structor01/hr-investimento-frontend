@@ -20,7 +20,7 @@ export default function LoggedLayout({ user, onLogout, children }) {
           {isAdmin && (
             <div className="sidebar-group">
               <p className="sidebar-group-title">Admin</p>
-              <Link to="/admin/clients">Clientes</Link>
+              <Link to="/admin/clients">Cadastros</Link>
               <Link to="/admin/contracts">Contratos</Link>
               <Link to="/admin/users">Usuários</Link>
             </div>
