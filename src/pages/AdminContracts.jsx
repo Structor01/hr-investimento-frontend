@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 
 export default function AdminContracts({
@@ -21,8 +21,9 @@ export default function AdminContracts({
   const [statusFilter, setStatusFilter] = useState('');
   const [tipoFilter, setTipoFilter] = useState('');
   const [produtoFilter, setProdutoFilter] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
   const location = useLocation();
-  const totalValor = contracts.reduce((acc, ctr) => acc + Number(ctr.valor || 0), 0);
 
   const statusLabels = {
     FINALIZADO: 'Finalizado',
@@ -35,7 +36,22 @@ export default function AdminContracts({
   const produtoLabels = {
     PRECATORIO: 'Precatório',
     RPV: 'RPV',
+    CHEQUE: 'Cheque',
+    EMPRESTIMO: 'Empréstimo',
   };
+
+  const statusOptions = [
+    { value: '', label: 'Todos os status' },
+    ...Object.entries(statusLabels).map(([value, label]) => ({ value, label })),
+  ];
+  const tipoOptions = [
+    { value: '', label: 'Todos os tipos' },
+    ...Object.entries(tipoLabels).map(([value, label]) => ({ value, label })),
+  ];
+  const produtoOptions = [
+    { value: '', label: 'Todos os produtos' },
+    ...Object.entries(produtoLabels).map(([value, label]) => ({ value, label })),
+  ];
 
   const getContractStatusFromDate = (contract) => {
     if (!contract.dataRecebimento) {
@@ -48,8 +64,10 @@ export default function AdminContracts({
     return dataRecebimento.getTime() < Date.now() ? 'Finalizado' : 'Aberto';
   };
 
-  const resolveContractStatus = (contract) =>
-    statusLabels[contract.status] || getContractStatusFromDate(contract);
+const resolveContractStatus = (contract) =>
+  statusLabels[contract.status] || getContractStatusFromDate(contract);
+
+const CONTRACTS_PAGE_SIZE = 10;
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -76,81 +94,181 @@ export default function AdminContracts({
     return Number.isFinite(num) ? num : 0;
   };
 
-  const applyFilters = () => {
-    onFilter?.({
+  const latestOnFilter = useRef(onFilter);
+
+  useEffect(() => {
+    latestOnFilter.current = onFilter;
+  }, [onFilter]);
+
+  useEffect(() => {
+    latestOnFilter.current?.({
       status: statusFilter || undefined,
       tipo: tipoFilter || undefined,
       produto: produtoFilter || undefined,
     });
-  };
+  }, [statusFilter, tipoFilter, produtoFilter]);
 
-  const clearFilters = () => {
-    setStatusFilter('');
-    setTipoFilter('');
-    setProdutoFilter('');
-    onFilter?.({});
-  };
+  const filteredContracts = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return contracts;
+    return contracts.filter((ctr) => {
+      const title = (ctr.titulo || '').toLowerCase();
+      const clientName = `${ctr.cliente?.nome || ''} ${ctr.cliente?.sobrenome || ''}`.toLowerCase();
+      return title.includes(term) || clientName.includes(term);
+    });
+  }, [contracts, searchTerm]);
+
+  const totalValor = filteredContracts.reduce((acc, ctr) => acc + Number(ctr.valor || 0), 0);
+
+  const averageRent =
+    filteredContracts.length
+      ? filteredContracts.reduce((sum, ctr) => sum + Number(ctr.rentabilidade || 0), 0) /
+        filteredContracts.length
+      : 0;
+  const totalPages = Math.max(1, Math.ceil(filteredContracts.length / CONTRACTS_PAGE_SIZE));
+  useEffect(() => {
+    setCurrentPage((prev) => Math.min(prev, totalPages));
+  }, [totalPages]);
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, tipoFilter, produtoFilter]);
+
+  const paginatedContracts = useMemo(() => {
+    const start = (currentPage - 1) * CONTRACTS_PAGE_SIZE;
+    return filteredContracts.slice(start, start + CONTRACTS_PAGE_SIZE);
+  }, [filteredContracts, currentPage]);
+
+  const pageStart = filteredContracts.length
+    ? (currentPage - 1) * CONTRACTS_PAGE_SIZE + 1
+    : 0;
+  const pageEnd = filteredContracts.length
+    ? Math.min(filteredContracts.length, currentPage * CONTRACTS_PAGE_SIZE)
+    : 0;
+  const hasMultiplePages = totalPages > 1;
 
   return (
     <>
-      <div className="card">
-        <div className="flex-between">
-          <h2 className="title">Admin • Contratos</h2>
-          <button
-            type="button"
-            onClick={() => {
-              setValor('');
-              setEditingContract(null);
-              setFormKey(`new-${Date.now()}`);
-              setStatus('ABERTO');
-              setTipo('ATIVO');
-              setProduto('PRECATORIO');
-              setOpen(true);
-            }}
-          >
-            Novo contrato
-          </button>
-        </div>
-      </div>
+      <nav className="breadcrumbs" aria-label="Breadcrumb">
+        <span>Admin</span>
+        <span aria-hidden="true">/</span>
+        <span>Contratos</span>
+        <span aria-hidden="true">/</span>
+        <span className="breadcrumbs-current">Todos os contratos</span>
+      </nav>
 
-      <div className="card">
-        <div className="flex-between">
-          <h3 className="title">Todos os contratos</h3>
-          <span className="badge">Admin</span>
+      <section className="table-panel">
+        <div className="table-toolbar">
+          <label className="table-search">
+            <span className="mini muted">Buscar por contrato ou cliente</span>
+            <input
+              type="search"
+              placeholder="Buscar por contrato ou cliente"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </label>
+          {filteredContracts.length > 0 && (
+            <div className="toolbar-kpis" aria-label="KPIs">
+              <div className="kpi-card">
+                <span className="kpi-label">Total investido</span>
+                <strong className="kpi-value">
+                  {totalValor.toLocaleString('pt-BR', {
+                    style: 'currency',
+                    currency: 'BRL',
+                  })}
+                </strong>
+              </div>
+              <div className="kpi-card">
+                <span className="kpi-label">Contratos filtrados</span>
+                <strong className="kpi-value">{filteredContracts.length}</strong>
+              </div>
+              <div className="kpi-card">
+                <span className="kpi-label">Rentabilidade média</span>
+                <strong className="kpi-value">{averageRent.toFixed(2)}%</strong>
+              </div>
+            </div>
+          )}
+          <div className="toolbar-spacer" aria-hidden="true" />
+          <div className="toolbar-actions">
+            <button
+              type="button"
+              onClick={() => {
+                setValor('');
+                setEditingContract(null);
+                setFormKey(`new-${Date.now()}`);
+                setStatus('ABERTO');
+                setTipo('ATIVO');
+                setProduto('PRECATORIO');
+                setOpen(true);
+              }}
+            >
+              Novo contrato
+            </button>
+          </div>
         </div>
-        <div className="filters" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', margin: '0.75rem 0' }}>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            <option value="">Todos os status</option>
-            {Object.entries(statusLabels).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-          <select value={tipoFilter} onChange={(e) => setTipoFilter(e.target.value)}>
-            <option value="">Todos os tipos</option>
-            {Object.entries(tipoLabels).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-          <select value={produtoFilter} onChange={(e) => setProdutoFilter(e.target.value)}>
-            <option value="">Todos os produtos</option>
-            {Object.entries(produtoLabels).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-          <button type="button" onClick={applyFilters}>
-            Filtrar
-          </button>
-          <button type="button" onClick={clearFilters}>
-            Limpar filtros
-          </button>
-        </div>
-        <div style={{ overflowX: 'auto', marginTop: '0.75rem' }}>
+        <div className="type-filters full-row" aria-label="Filtros por tipo">
+            <div className="filters">
+              <span className="mini muted">Status</span>
+              <div className="filters-row">
+                {statusOptions.map((option) => {
+                  const active =
+                    option.value === '' ? !statusFilter : statusFilter === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={`pill ${active ? 'active' : ''}`}
+                      aria-pressed={active}
+                      onClick={() => setStatusFilter(option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="filters">
+              <span className="mini muted">Tipo</span>
+              <div className="filters-row">
+                {tipoOptions.map((option) => {
+                  const active =
+                    option.value === '' ? !tipoFilter : tipoFilter === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={`pill ${active ? 'active' : ''}`}
+                      aria-pressed={active}
+                      onClick={() => setTipoFilter(option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="filters">
+              <span className="mini muted">Produto</span>
+              <div className="filters-row">
+                {produtoOptions.map((option) => {
+                  const active =
+                    option.value === '' ? !produtoFilter : produtoFilter === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={`pill ${active ? 'active' : ''}`}
+                      aria-pressed={active}
+                      onClick={() => setProdutoFilter(option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        <div className="table-scroll">
           <table className="data-table">
             <thead>
               <tr>
@@ -167,7 +285,7 @@ export default function AdminContracts({
               </tr>
             </thead>
             <tbody>
-              {contracts.map((ctr) => (
+              {paginatedContracts.map((ctr) => (
                 <tr key={ctr.id}>
                   <td>
                     {ctr.cliente?.nome} {ctr.cliente?.sobrenome || ''}
@@ -270,31 +388,45 @@ export default function AdminContracts({
                   </td>
                 </tr>
               ))}
-              {!contracts.length && (
+              {!filteredContracts.length && (
                 <tr>
                   <td colSpan={8} style={{ textAlign: 'center' }}>
                     Nenhum contrato cadastrado.
                   </td>
                 </tr>
               )}
-              {!!contracts.length && (
-                <tr className="total">
-                  <td>Total</td>
-                  <td>{contracts.length} contratos</td>
-                  <td>—</td>
-                  <td>—</td>
-                  <td>—</td>
-                  <td>
-                    {totalValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </td>
-                  <td>—</td>
-                  <td />
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
-      </div>
+        {hasMultiplePages && (
+          <div className="table-pagination">
+            <span className="page-info">
+              Exibindo {pageStart}–{pageEnd} de {filteredContracts.length}
+            </span>
+            <div className="pagination-controls">
+              <button
+                type="button"
+                className="pill"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+              >
+                Anterior
+              </button>
+              <span className="page-info">
+                Página {currentPage} de {totalPages}
+              </span>
+              <button
+                type="button"
+                className="pill"
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+              >
+                Próxima
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
 
       {open && (
         <div

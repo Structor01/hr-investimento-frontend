@@ -5,6 +5,8 @@ const ROLE_LABELS = {
   USER: 'Usuário',
 };
 
+const USERS_PAGE_SIZE = 10;
+
 export default function AdminUsers({
   users = [],
   clients = [],
@@ -22,6 +24,8 @@ export default function AdminUsers({
   const [creatingUser, setCreatingUser] = useState(false);
   const [modalSearchTerm, setModalSearchTerm] = useState('');
   const [modalSortConfig, setModalSortConfig] = useState({ key: 'nome', direction: 'asc' });
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     if (!editingUser) return;
@@ -133,13 +137,60 @@ export default function AdminUsers({
     }
   };
 
+  const filteredUsers = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return users;
+    return users.filter((user) => {
+      const target = `${user.name || ''} ${user.email || ''}`.toLowerCase();
+      return target.includes(term);
+    });
+  }, [users, searchTerm]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / USERS_PAGE_SIZE));
+  useEffect(() => {
+    setCurrentPage((prev) => Math.min(prev, totalPages));
+  }, [totalPages]);
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  const paginatedUsers = useMemo(() => {
+    const start = (currentPage - 1) * USERS_PAGE_SIZE;
+    return filteredUsers.slice(start, start + USERS_PAGE_SIZE);
+  }, [filteredUsers, currentPage]);
+  const pageStart = filteredUsers.length ? (currentPage - 1) * USERS_PAGE_SIZE + 1 : 0;
+  const pageEnd = filteredUsers.length
+    ? Math.min(filteredUsers.length, currentPage * USERS_PAGE_SIZE)
+    : 0;
+  const hasMultiplePages = totalPages > 1;
+
   return (
     <>
-      <div className="card">
-        <div className="flex-between">
-          <h2 className="title">Admin • Usuários</h2>
-          <div className="header-actions">
-            <span className="badge">Admin</span>
+      <nav className="breadcrumbs" aria-label="Breadcrumb">
+        <span>Admin</span>
+        <span aria-hidden="true">/</span>
+        <span>Usuários</span>
+        <span aria-hidden="true">/</span>
+        <span className="breadcrumbs-current">Gestão de usuários</span>
+      </nav>
+
+      <section className="table-panel">
+        <div className="table-toolbar">
+          <label className="table-search">
+            <span className="mini muted">Buscar por nome ou email</span>
+            <input
+              type="search"
+              placeholder="Digite nome ou email"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </label>
+          <div className="type-filters" aria-label="Contadores de usuários">
+            <span className="badge mini">
+              {filteredUsers.length} de {users.length} exibidos
+            </span>
+          </div>
+          <div className="toolbar-actions">
             <button
               type="button"
               onClick={() => setCreateModalOpen(true)}
@@ -149,7 +200,7 @@ export default function AdminUsers({
             </button>
           </div>
         </div>
-        <div className="table" style={{ marginTop: '0.75rem' }}>
+        <div className="table-scroll">
           <table className="data-table">
             <thead>
               <tr>
@@ -162,7 +213,7 @@ export default function AdminUsers({
               </tr>
             </thead>
             <tbody>
-              {users.map((user) => (
+              {paginatedUsers.map((user) => (
                 <tr key={user.id}>
                   <td>{user.name || '—'}</td>
                   <td>{user.email}</td>
@@ -208,17 +259,45 @@ export default function AdminUsers({
                   </td>
                 </tr>
               ))}
-              {!users.length && (
+              {!paginatedUsers.length && (
                 <tr>
-                  <td colSpan={6} className="mini">
-                    Nenhum usuário cadastrado.
+                  <td colSpan={6} className="mini" style={{ textAlign: 'center' }}>
+                    Nenhum usuário encontrado.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
-      </div>
+        {hasMultiplePages && (
+          <div className="table-pagination">
+            <span className="page-info">
+              Exibindo {pageStart}–{pageEnd} de {filteredUsers.length}
+            </span>
+            <div className="pagination-controls">
+              <button
+                type="button"
+                className="pill"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+              >
+                Anterior
+              </button>
+              <span className="page-info">
+                Página {currentPage} de {totalPages}
+              </span>
+              <button
+                type="button"
+                className="pill"
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+              >
+                Próxima
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
 
       {createModalOpen && (
         <div className="modal-backdrop" onClick={() => setCreateModalOpen(false)}>

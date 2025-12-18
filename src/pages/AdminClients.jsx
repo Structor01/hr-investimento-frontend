@@ -33,27 +33,34 @@ const EditClientIcon = () => (
   </svg>
 );
 
+const CLIENT_TYPE_FILTERS = [
+  { value: 'TODOS', label: 'Todos' },
+  { value: 'INVESTIDOR', label: 'Investidor' },
+  { value: 'ESCRITORIO', label: 'Escritório' },
+];
+
+const CLIENTS_PAGE_SIZE = 10;
+
 export default function AdminClients({
   clients,
   users,
   onCreateClient,
   onLinkClient,
   onShareLink,
-  onDeleteClients,
   onUpdateClient,
 }) {
   const [open, setOpen] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
   const [selectedUserId, setSelectedUserId] = useState('');
-  const [selectedIds, setSelectedIds] = useState([]);
-  const [deleting, setDeleting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'nome', direction: 'asc' });
   const navigate = useNavigate();
   const [clientType, setClientType] = useState('INVESTIDOR');
+  const [filterType, setFilterType] = useState('TODOS');
   const [editingClient, setEditingClient] = useState(null);
   const [clientFormKey, setClientFormKey] = useState('client-form');
+  const [currentPage, setCurrentPage] = useState(1);
 
   const resetClientFormState = () => {
     setEditingClient(null);
@@ -63,11 +70,15 @@ export default function AdminClients({
 
   const filteredClients = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
-    if (!term) return clients;
-    return clients.filter((client) =>
-      `${client.nome} ${client.sobrenome}`.toLowerCase().includes(term),
-    );
-  }, [clients, searchTerm]);
+    return clients.filter((client) => {
+      const matchesTerm = !term
+        ? true
+        : `${client.nome} ${client.sobrenome}`.toLowerCase().includes(term);
+      const typeValue = (client.tipo || 'INVESTIDOR').toString();
+      const matchesType = filterType === 'TODOS' || typeValue === filterType;
+      return matchesTerm && matchesType;
+    });
+  }, [clients, searchTerm, filterType]);
 
   const sortedClients = useMemo(() => {
     const sorted = [...filteredClients];
@@ -81,29 +92,28 @@ export default function AdminClients({
     return sorted;
   }, [filteredClients, sortConfig]);
 
-  const visibleClientIds = useMemo(() => sortedClients.map((client) => client.id), [
-    sortedClients,
-  ]);
-  const allVisibleSelected =
-    visibleClientIds.length > 0 && visibleClientIds.every((id) => selectedIds.includes(id));
+  const totalPages = Math.max(1, Math.ceil(sortedClients.length / CLIENTS_PAGE_SIZE));
 
-  const toggleSelect = (clientId) => {
-    setSelectedIds((prev) =>
-      prev.includes(clientId) ? prev.filter((id) => id !== clientId) : [...prev, clientId],
-    );
-  };
+  useEffect(() => {
+    setCurrentPage((prev) => (prev > totalPages ? totalPages : prev));
+  }, [totalPages]);
 
-  const toggleAll = (checked) => {
-    if (!visibleClientIds.length) {
-      setSelectedIds([]);
-      return;
-    }
-    if (checked) {
-      setSelectedIds((prev) => Array.from(new Set([...prev, ...visibleClientIds])));
-    } else {
-      setSelectedIds((prev) => prev.filter((id) => !visibleClientIds.includes(id)));
-    }
-  };
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterType]);
+
+  const paginatedClients = useMemo(() => {
+    const start = (currentPage - 1) * CLIENTS_PAGE_SIZE;
+    return sortedClients.slice(start, start + CLIENTS_PAGE_SIZE);
+  }, [sortedClients, currentPage]);
+
+  const hasMultiplePages = totalPages > 1;
+  const pageStart = sortedClients.length
+    ? (currentPage - 1) * CLIENTS_PAGE_SIZE + 1
+    : 0;
+  const pageEnd = sortedClients.length
+    ? Math.min(sortedClients.length, currentPage * CLIENTS_PAGE_SIZE)
+    : 0;
 
   const handleSort = (key) => {
     setSortConfig((prev) => {
@@ -127,18 +137,11 @@ export default function AdminClients({
     return sortConfig.direction === 'asc' ? 'ascending' : 'descending';
   };
 
-  const handleDeleteSelected = async () => {
-    if (!selectedIds.length || deleting) return;
-    const confirmed = window.confirm(
-      selectedIds.length === 1
-        ? 'Deseja excluir este cliente?'
-        : `Deseja excluir ${selectedIds.length} clientes selecionados?`,
-    );
-    if (!confirmed) return;
-    setDeleting(true);
-    const ok = await onDeleteClients?.(selectedIds);
-    if (ok) setSelectedIds([]);
-    setDeleting(false);
+  const openClientForm = () => {
+    setEditingClient(null);
+    setClientType('INVESTIDOR');
+    setClientFormKey(`client-form-${Date.now()}`);
+    setOpen(true);
   };
 
   const handleClientFormSubmit = async (e) => {
@@ -166,10 +169,6 @@ export default function AdminClients({
     }
   };
 
-  useEffect(() => {
-    setSelectedIds((prev) => prev.filter((id) => clients.some((c) => c.id === id)));
-  }, [clients]);
-
   const clientTypeLabels = {
     INVESTIDOR: 'Investidor',
     ESCRITORIO: 'Escritório',
@@ -177,78 +176,46 @@ export default function AdminClients({
 
   return (
     <>
-      <div className="card">
-        <div className="flex-between">
-          <h2 className="title">Cadastros</h2>
-          <div className="header-actions">
-            <span className="badge">{clients.length}</span>
-            <button
-              type="button"
-              onClick={() => {
-                setEditingClient(null);
-                setClientType('INVESTIDOR');
-                setClientFormKey(`client-form-${Date.now()}`);
-                setOpen(true);
-              }}
-              style={{ whiteSpace: 'nowrap' }}
-            >
-              Novo cliente
-            </button>
-          </div>
-        </div>
-      </div>
+      <nav className="breadcrumbs" aria-label="Breadcrumb">
+        <span>Admin</span>
+        <span aria-hidden="true">/</span>
+        <span>Cadastros</span>
+        <span aria-hidden="true">/</span>
+        <span className="breadcrumbs-current">Clientes</span>
+      </nav>
 
-      <div className="card">
-        <div className="flex-between">
-          <h3 className="title">Cadastros publicados</h3>
-          <div className="header-actions" style={{ gap: '0.5rem' }}>
-            {!!selectedIds.length && (
-              <span className="badge" aria-label={`${selectedIds.length} selecionado(s)`}>
-                {selectedIds.length} selecionado(s)
-              </span>
-            )}
-            <span className="badge">{clients.length}</span>
-            <button
-              type="button"
-              className="pill"
-              style={{
-                background: 'linear-gradient(135deg, #ff6b6b, #c0392b)',
-                color: '#fff',
-                opacity: selectedIds.length && !deleting ? 1 : 0.5,
-                cursor: selectedIds.length && !deleting ? 'pointer' : 'not-allowed',
-              }}
-              disabled={!selectedIds.length || deleting}
-              onClick={handleDeleteSelected}
-            >
-              {deleting ? 'Excluindo...' : 'Excluir selecionados'}
+      <section className="table-panel">
+        <div className="table-toolbar">
+          <label className="table-search">
+            <span className="mini">Buscar por nome</span>
+            <input
+              type="search"
+              placeholder="Digite nome ou sobrenome"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </label>
+          <div className="type-filters" aria-label="Filtros por tipo">
+            {CLIENT_TYPE_FILTERS.map((item) => (
+              <button
+                type="button"
+                key={item.value}
+                className={`pill ${filterType === item.value ? 'active' : ''}`}
+                aria-pressed={filterType === item.value}
+                onClick={() => setFilterType(item.value)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <div className="toolbar-actions">
+            <button type="button" onClick={openClientForm} style={{ whiteSpace: 'nowrap' }}>
+              Novo cadastro
             </button>
           </div>
         </div>
         <div className="table">
-          <div className="table-utilities">
-            <label className="table-search">
-              <span className="mini">Buscar por nome</span>
-              <input
-                type="search"
-                placeholder="Digite nome ou sobrenome"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </label>
-            <span className="badge mini">
-              {sortedClients.length} de {clients.length} exibidos
-            </span>
-          </div>
           <div className="table-row head">
-            <span>
-              <input
-                type="checkbox"
-                aria-label="Selecionar todos"
-                checked={allVisibleSelected}
-                onChange={(e) => toggleAll(e.target.checked)}
-                disabled={deleting}
-              />
-            </span>
             <span>
               <button
                 type="button"
@@ -278,68 +245,59 @@ export default function AdminClients({
             <span>Tipo</span>
             <span>Ações</span>
           </div>
-          {sortedClients.map((c) => (
+          {paginatedClients.map((c) => (
             <div key={c.id} className="table-row">
-              <span>
-                <input
-                  type="checkbox"
-                  aria-label={`Selecionar ${c.nome}`}
-                  checked={selectedIds.includes(c.id)}
-                  onChange={() => toggleSelect(c.id)}
-                  disabled={deleting}
-                />
-              </span>
               <span>{c.nome}</span>
-            <span>{c.sobrenome}</span>
-            <span>{clientTypeLabels[c.tipo] || clientTypeLabels.INVESTIDOR}</span>
-            <span>
-              <div className="table-actions">
-                <button
-                  type="button"
-                  className="icon-chip"
-                  aria-label="Editar cliente"
-                  data-tooltip="Editar cliente"
-                  onClick={() => {
-                    setEditingClient(c);
-                    setClientType(c.tipo || 'INVESTIDOR');
-                    setClientFormKey(`client-form-edit-${c.id}-${Date.now()}`);
-                    setOpen(true);
-                  }}
-                >
-                  <EditClientIcon />
-                </button>
-                <button
-                  type="button"
-                  className="icon-chip"
-                  aria-label="Adicionar contrato"
-                  data-tooltip="Adicionar contrato"
-                  onClick={() => navigate(`/admin/contracts?clienteId=${c.id}&open=true`)}
-                >
-                  <AddContractIcon />
-                </button>
-                <button
-                  type="button"
-                  className="icon-chip"
-                  aria-label="Vincular usuário"
-                  data-tooltip="Vincular usuário"
-                  onClick={() => {
-                    setSelectedClient(c);
-                    setLinkOpen(true);
-                  }}
-                >
-                  <LinkUserIcon />
-                </button>
-                <button
-                  type="button"
-                  className="icon-chip"
-                  aria-label="Abrir link público"
-                  data-tooltip="Abrir link público"
-                  onClick={() => onShareLink?.(c.id)}
-                >
-                  <ExternalLinkIcon />
-                </button>
-              </div>
-            </span>
+              <span>{c.sobrenome}</span>
+              <span>{clientTypeLabels[c.tipo] || clientTypeLabels.INVESTIDOR}</span>
+              <span>
+                <div className="table-actions">
+                  <button
+                    type="button"
+                    className="icon-chip"
+                    aria-label="Editar cliente"
+                    data-tooltip="Editar cliente"
+                    onClick={() => {
+                      setEditingClient(c);
+                      setClientType(c.tipo || 'INVESTIDOR');
+                      setClientFormKey(`client-form-edit-${c.id}-${Date.now()}`);
+                      setOpen(true);
+                    }}
+                  >
+                    <EditClientIcon />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-chip"
+                    aria-label="Adicionar contrato"
+                    data-tooltip="Adicionar contrato"
+                    onClick={() => navigate(`/admin/contracts?clienteId=${c.id}&open=true`)}
+                  >
+                    <AddContractIcon />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-chip"
+                    aria-label="Vincular usuário"
+                    data-tooltip="Vincular usuário"
+                    onClick={() => {
+                      setSelectedClient(c);
+                      setLinkOpen(true);
+                    }}
+                  >
+                    <LinkUserIcon />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-chip"
+                    aria-label="Abrir link público"
+                    data-tooltip="Abrir link público"
+                    onClick={() => onShareLink?.(c.id)}
+                  >
+                    <ExternalLinkIcon />
+                  </button>
+                </div>
+              </span>
             </div>
           ))}
           {!sortedClients.length && (
@@ -350,7 +308,35 @@ export default function AdminClients({
             </div>
           )}
         </div>
-      </div>
+        {hasMultiplePages && (
+          <div className="table-pagination">
+            <span className="page-info">
+              Exibindo {pageStart}–{pageEnd} de {sortedClients.length}
+            </span>
+            <div className="pagination-controls">
+              <button
+                type="button"
+                className="pill"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+              >
+                Anterior
+              </button>
+              <span className="page-info">
+                Página {currentPage} de {totalPages}
+              </span>
+              <button
+                type="button"
+                className="pill"
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+              >
+                Próxima
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
 
       {linkOpen && (
         <div className="modal-backdrop" onClick={() => setLinkOpen(false)}>

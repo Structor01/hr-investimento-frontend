@@ -54,7 +54,7 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [error, info]);
 
-  const handleLogout = (message = '') => {
+  const handleLogout = (message = '', options = {}) => {
     setGlobalLoading(false);
     setLoginLoading(false);
     localStorage.removeItem('auth_token');
@@ -69,8 +69,17 @@ export default function App() {
     setDashboardSummary(null);
     setInfo('');
     setError(message);
+    const { refresh = false } = options;
+    if (refresh) {
+      if (typeof window !== 'undefined') {
+        window.location.assign('/login');
+      }
+      return;
+    }
     navigate('/login');
   };
+
+  const handleLogoutAndReload = () => handleLogout('', { refresh: true });
 
   const handleUnauthorized = (err) => {
     if (err?.status === 401) {
@@ -126,7 +135,10 @@ export default function App() {
         setClients(c);
         setContracts(ct);
         if (isAdmin) {
-          await Promise.all([loadAdminContracts(adminContractFilters), api.adminClients(token)]);
+          const adminClientsPromise = api.adminClients(token);
+          await loadAdminContracts(adminContractFilters);
+          const acl = await adminClientsPromise;
+          setAdminClients(acl);
           const au = await api.adminUsers(token);
           setAdminUsers(au);
         } else {
@@ -205,6 +217,7 @@ export default function App() {
       email: (data.get('email') || '').toString(),
       senha: (data.get('senha') || '').toString(),
     };
+    let loginSuccessful = false;
     try {
       const res = await api.login(payload);
       setToken(res.token);
@@ -230,13 +243,16 @@ export default function App() {
       }
       const summary = await api.dashboardSummary(res.token);
       setDashboardSummary(summary);
-      navigate('/dashboard');
+      loginSuccessful = true;
     } catch (err) {
       if (handleUnauthorized(err)) return;
       setError(err.message);
     } finally {
       setLoginLoading(false);
       setGlobalLoading(false);
+      if (loginSuccessful && typeof window !== 'undefined') {
+        window.location.assign('/dashboard');
+      }
     }
   };
 
@@ -439,7 +455,7 @@ export default function App() {
   const renderAdminRoute = (content) => (
     <ProtectedRoute token={token}>
       {user?.role === 'ADMIN' ? (
-        <LoggedLayout user={user} onLogout={handleLogout}>
+        <LoggedLayout user={user} onLogout={handleLogoutAndReload}>
           {content}
         </LoggedLayout>
       ) : (
@@ -505,35 +521,6 @@ export default function App() {
     }
   };
 
-  const handleAdminDeleteClient = async (ids = []) => {
-    setError('');
-    setInfo('');
-    if (!token) {
-      setError('Faça login para excluir clientes.');
-      return false;
-    }
-    if (!ids.length) return false;
-    try {
-      for (const id of ids) {
-        await api.adminDeleteClient(id, token);
-      }
-      const [c, ac, acl] = await Promise.all([
-        api.listClients(token),
-        api.adminContracts(token),
-        api.adminClients(token),
-      ]);
-      setClients(c);
-      setAdminContracts(ac);
-      setAdminClients(acl);
-      setInfo(ids.length > 1 ? 'Clientes removidos.' : 'Cliente removido.');
-      return true;
-    } catch (err) {
-      if (handleUnauthorized(err)) return false;
-      setError(err.message);
-      return false;
-    }
-  };
-
   return (
     <div className={isAuthRoute ? 'auth-page' : 'app'}>
       {globalLoading && (
@@ -570,7 +557,7 @@ export default function App() {
           path="/dashboard"
           element={
             <ProtectedRoute token={token}>
-              <LoggedLayout user={user} onLogout={handleLogout}>
+              <LoggedLayout user={user} onLogout={handleLogoutAndReload}>
                 <Dashboard
                   clients={clients}
                   contracts={contracts}
@@ -595,7 +582,7 @@ export default function App() {
           path="/contracts"
           element={
             <ProtectedRoute token={token}>
-              <LoggedLayout user={user} onLogout={handleLogout}>
+              <LoggedLayout user={user} onLogout={handleLogoutAndReload}>
                 <Contracts
                   contracts={contracts}
                   user={user}
@@ -607,14 +594,13 @@ export default function App() {
         <Route
           path="/admin/clients"
           element={renderAdminRoute(
-            <AdminClients
-              clients={adminClients}
-              users={adminUsers}
-              onCreateClient={handleCreateClient}
-              onUpdateClient={handleUpdateClient}
-              onLinkClient={handleLinkClient}
-              onDeleteClients={handleAdminDeleteClient}
-              onShareLink={async (clientId) => {
+              <AdminClients
+                clients={adminClients}
+                users={adminUsers}
+                onCreateClient={handleCreateClient}
+                onUpdateClient={handleUpdateClient}
+                onLinkClient={handleLinkClient}
+                onShareLink={async (clientId) => {
                 try {
                   const res = await api.adminShareToken({ clientId: Number(clientId) }, token);
                   const link = `${window.location.origin}/public/${res.token}`;
